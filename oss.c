@@ -87,12 +87,12 @@ void schedule(PCB* pcb);
 void proc_scheduled(PCB* pcb);
 void on_proc_exit(PCB* pcb);
 void dealloc_pcb(PCB* pcb);
-bool can_sched();
 
 /* MORE GLOBALS */
 static Global *global = NULL;
 static char* log_path = DEF_LOG_PATH;
 int runtime = 100;
+clock_t spawn_timer;
 
 int main(int argc, char** argv)
 {
@@ -102,6 +102,7 @@ int main(int argc, char** argv)
 	
 	if (argc == 1)
 	{
+		//printf("%d\n", global -> exited_proc_count);
 		printf("Too few arguments given, run again with [-h] for usage options\n");
 		return EXIT_FAILURE;
 	}	
@@ -129,7 +130,7 @@ int main(int argc, char** argv)
 				return EXIT_FAILURE;
 		}
 	}
-
+	spawn_timer = clock();
 	alarm(runtime); // set alarm
 	alloc_shared_memory(true);
 	alloc_msg_q(true);
@@ -148,10 +149,12 @@ int main(int argc, char** argv)
 
 	while (true)
 	{
+		printf("EXITED: %d\n SPAWNED: %d\n", global -> exited_proc_count, global -> spawned_proc_count);
 		add_time(&global -> util -> sys_time, DELTA);
 		add_time(&global -> idle, DELTA);
 
 		sched_proc(); // handle process scheduling for iteration
+		printf("after sched_proc\n");
 
 		int state;
 		pid_t pid = waitpid(-1, &state, WNOHANG);
@@ -167,14 +170,15 @@ int main(int argc, char** argv)
 				}
 			}
 		}
-		if(!can_sched()) break;
+		//if(!can_sched()) break;
+		if(global -> exited_proc_count == global -> spawned_proc_count) break;
 	}
 
 	if (quit) printf("We're out of time folks...\n");
 
 	printf("What have we done?\n");
-	printf("\t Realtime Processes: %d\n", global -> proc_count_realtime);
-	printf("\t Normal Processes: %d\n", global -> proc_count_normal);
+	printf("\t CPU-Bound Processes: %d\n", global -> proc_count_realtime);
+	printf("\t IO-Bound Processes: %d\n", global -> proc_count_normal);
 
 	printf("Our totals...!\n");
 	printf("\tCPU:			%ld:%ld\n", global -> total_cpu.seconds, global -> total_cpu.nano);
@@ -196,6 +200,8 @@ int main(int argc, char** argv)
 	printf("\tSystem:   %ld:%ld\n", global -> util -> sys_time.seconds, global -> util -> sys_time.nano);
 	printf("\tIdle:     %ld:%ld\n", global -> idle.seconds, global -> idle.nano);
 
+	cleanup();
+
 	return EXIT_SUCCESS;
 }
 
@@ -207,11 +213,6 @@ void print_usage()
 	printf("\n[-h] Describe how the project should be run and then, terminate.\n");
 	printf("[-s t] Indicate how many maximum seconds before the system terminates.\n");
 	printf("[-l f] Specify a particular name for the log file.\n");
-}
-
-bool can_sched()
-{
-	return global -> exited_proc_count < global -> spawned_proc_count || !quit;
 }
 
 void timeout(int sig)
@@ -261,6 +262,7 @@ void init_q()
 // tries to schedule the processes for time on CPU
 void sched_proc()
 {
+	printf("in sched_proc\n");
 	try_spawn();
 	proc_running();
 	try_q_swap();
@@ -271,23 +273,28 @@ void sched_proc()
 // handles the check for whether or not a process can spawn in the system
 void try_spawn()
 {
+	clock_t spawn_timer_check;
+	spawn_timer_check = clock();
+	if ((double)(spawn_timer_check - spawn_timer) / CLOCKS_PER_SEC > TIMEOUT) return;
+	printf("try_spawn()\n");
 	if (proc_can_spawn()) spawn();
 }
 
 // returns true if there is room for a new process to spawn in the system
 bool proc_can_spawn()
 {
+	printf("proc_can_spawn()\n");
 	Time *sys = &global -> util -> sys_time;
 	Time *next = &global -> next_spawn_try;
-	return (!quit && (global -> spawned_proc_count < PROC_MAX) &&
-		(sys -> seconds >= next -> seconds) && 
-		(sys -> nano >= next -> nano) &&
-		(global -> spawned_proc_count < PROC_MAX));
+	//return !quit && global -> spawned_proc_count < PROC_MAX && sys -> seconds >= next -> seconds && sys -> nano >= next -> nano;
+	return !quit && global -> spawned_proc_count < PROC_MAX;
 }
 
 // handles the spawning of a new process into the system
 void spawn()
 {
+	sleep(1); // sleeps about a second between spawning
+	printf("spawn()\n");
 	int loc_PID = find_a_pid();
 	if (loc_PID > -1)
 	{
@@ -312,6 +319,7 @@ void spawn()
 // searches for and finds an availble PID for a new process before spawning
 int find_a_pid()
 {
+	printf("find_a_pid()\n");
 	unsigned int i = 1;
 	unsigned int pos = 1;
 
@@ -327,12 +335,14 @@ int find_a_pid()
 // returns pcb from location in the proc table of util struct
 PCB* get_pcb(unsigned int loc_PID)
 {
+	printf("get_pcb()");
 	return &global -> util -> proc_table[loc_PID];
 }
 
 // handles the initialization of new process PCB
 void init_pcb(PCB* pcb, unsigned int loc_PID, pid_t pcb_PID)
 {
+	printf("init_pcb\n");
 	pcb -> loc_pid = loc_PID;
 	pcb -> PCB_pid = pcb_PID;
 	pcb -> prio = rand() % 100 < CHANCE_PROCS_RT ? 0 : 1;
@@ -354,6 +364,8 @@ void init_pcb(PCB* pcb, unsigned int loc_PID, pid_t pcb_PID)
 
 void proc_created(PCB* pcb)
 {
+	printf("proc_created()\n");
+	printf("in proc_created\n");
 	global -> spawned_proc_count++;
 	q_push(get_active_q()[pcb -> prio], pcb -> loc_pid);
 	global -> next_spawn_try.seconds = global -> util -> sys_time.seconds;
@@ -371,6 +383,7 @@ void proc_created(PCB* pcb)
 // 	a handler is called to handle the received message appropriately
 void proc_running()
 {
+	printf("proc_running()\n");
 	if (is_running())
 	{
 		PCB *pcb = global -> run;
@@ -384,13 +397,15 @@ void proc_running()
 // returns true is a process is running
 bool is_running()
 {
-	return &global -> run != NULL;
+	printf("is_running()\n");
+	return global -> run != NULL;
 }
 
 // handles proc termination
 void on_proc_terminated(PCB* pcb)
 {
-	rec_msg(global -> msg, get_parent_q(), pcb -> loc_pid, pcb -> prio);
+	printf("on_proc_terminated()\n");
+	rec_msg(global -> msg, get_parent_q(), pcb -> PCB_pid, true);
 	copy_time(&global -> util -> sys_time, &pcb -> proc_exit);
 	int cent = atoi(global -> msg -> msg_text);
 	int cost = get_usr_quantum(pcb -> prio);
@@ -403,6 +418,7 @@ void on_proc_terminated(PCB* pcb)
 	subt_time(&pcb -> waiting, &pcb -> block);
 
 	global -> run = NULL;
+	//global -> exited_proc_count++;
 
 	logger("%-6s PID: %2d, Priority: %d", "TTTTTT", pcb -> loc_pid, pcb -> prio);
 	printf("\nPROCESS TERMINATED\n");
@@ -418,6 +434,7 @@ void on_proc_terminated(PCB* pcb)
 
 void on_proc_exp(PCB* pcb)
 {
+	printf("on_proc_exp()\n");
 	int prev_prio = pcb -> prio;
 	int next_prio = pcb -> prio;
 
@@ -455,6 +472,7 @@ void on_proc_exp(PCB* pcb)
 
 void on_proc_block(PCB* pcb)
 {
+	printf("on_proc_block()\n");
 	rec_msg(global -> msg, get_parent_q(), pcb -> PCB_pid, true);
 
 	int cent = atoi(global -> msg -> msg_text);
@@ -471,6 +489,7 @@ void on_proc_block(PCB* pcb)
 
 void on_proc_exit(PCB* pcb)
 {
+	printf("on_proc_exit()\n");
 	global -> exited_proc_count++;
 	add_time(&global -> total_cpu, pcb -> cpu.seconds * 1e9 + pcb -> cpu.nano);
 	add_time(&global -> total_block, pcb -> block.seconds * 1e9 + pcb -> block.nano);
@@ -480,12 +499,14 @@ void on_proc_exit(PCB* pcb)
 
 void dealloc_pcb(PCB* pcb)
 {
+	printf("dealloc_pcb()\n");
 	BIT_CLEAR(global -> vec, pcb -> loc_pid - 1);
 	memset(&global -> util -> proc_table[pcb -> loc_pid], 0, sizeof(PCB));
 }
 
 void try_q_swap()
 {
+	printf("try_q_swap()\n");
 	if (is_running()) return;
 	int i;
 	for (i = 0; i < Q_SET_COUNT; i++)
@@ -505,6 +526,7 @@ void try_q_swap()
 
 void q_swap()
 {
+	printf("q_swap()\n");
 	Queue **temp = global -> active;
 	global -> active = global -> expired;
 	global -> expired = temp;
@@ -512,6 +534,7 @@ void q_swap()
 
 void blocked_procs()
 {
+	printf("blocked_procs()\n");
 	Queue* blocked = get_block_q();
 	if(!q_empty(blocked))
 	{
@@ -524,15 +547,15 @@ void blocked_procs()
 		int i;
 		for (i = 0; i < blocked -> num_occupied; i++)
 		{
+			printf("in loop in blocked_procs()\n");
 			PCB* pcb = get_pcb(q_pop(blocked));
-			if (msgrcv(get_parent_q(), global -> msg, sizeof(Msg), pcb -> PCB_pid, IPC_NOWAIT) > 1 &&
-				strcmp(global -> msg -> msg_text, "UNBLOCKED") == 0)
+			if (msgrcv(get_parent_q(), global -> msg, sizeof(Msg), pcb -> PCB_pid, IPC_NOWAIT) > 1 && strcmp(global -> msg -> msg_text, "UNBLOCKED") == 0)
 			{
 				unblock_proc(pcb);
 			}
 			else
 			{
-				q_push(get_block_q(), pcb -> PCB_pid);
+				q_push(get_block_q(), pcb -> loc_pid);
 			}
 		}
 	}
@@ -540,12 +563,14 @@ void blocked_procs()
 
 void unblock_proc(PCB* pcb)
 {
+	printf("unblock_procs()\n");
 	q_push(get_active_q()[pcb -> prio], pcb -> loc_pid);
 	logger("%-6s PID: %2d, Priority: %d", "UUUUUU", pcb -> loc_pid, pcb -> prio);
 }
 
 void try_schedule()
 {
+	printf("try_schedule\n");
 	if (is_running()) return;
 
 	int i;
@@ -563,6 +588,7 @@ void try_schedule()
 
 void schedule(PCB* pcb)
 {
+	printf("schedule()\n");
 	global -> run = pcb;
 	send_msg(global -> msg, get_child_q(), pcb -> PCB_pid, "", false);
 	proc_scheduled(pcb);
@@ -570,6 +596,7 @@ void schedule(PCB* pcb)
 
 void proc_scheduled(PCB *pcb)
 {
+	printf("proc_scheduled\n");
 	logger("%-6s PID: %2d, Priority: %d", "SSSSSS", pcb -> loc_pid, pcb -> prio);
 }
 

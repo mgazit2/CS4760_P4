@@ -28,4 +28,4 @@ $(USER): $(USER_OBJ)
 
 .PHONY: clean
 clean:
-	/bin/rm -f $(OUTPUT) *.o *.log
+	/bin/rm -f $(OUTPUT) *.o logfile

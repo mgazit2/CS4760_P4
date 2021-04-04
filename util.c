@@ -53,7 +53,7 @@ void error(char* fmt, ...)
 	vsnprintf(buf, BUFF_LEN, fmt, args);
 	va_end(args);
 
-	fprintf(stderr, "%s\n", program_name, buf);
+	fprintf(stderr, "%s: %s\n", program_name, buf);
 
 	cleanup();
 }
@@ -125,6 +125,7 @@ int send_msg(Msg* msg, int msg_q_id, pid_t addr, char *txt, bool wait)
 // handles the receival of a message by one process from another
 int rec_msg(Msg* msg, int msg_q_id, pid_t addr, bool wait)
 {
+	printf("RECEIVE MESSAGE\n");
 	return msgrcv(msg_q_id, msg, sizeof(Msg), addr, wait ? 0 : IPC_NOWAIT);
 }
 
@@ -184,6 +185,7 @@ void set_time(Time* time, long _nano)
 void add_time(Time* time, long _nano)
 {
 	time -> nano += _nano;
+	time -> nano = time -> nano * (rand() % 1000); // line is added to add illusion of overhead
 	while (time -> nano >= 1e9)
 	{
 		time -> nano -= 1e9;
