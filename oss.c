@@ -4,9 +4,6 @@
  * oss.c
  */
 
-#include <getopt.h>
-#include <signal.h>
-#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,11 +13,14 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
-
+#include <getopt.h>
+#include <signal.h>
+#include <stdbool.h>
 #include "oss.h"
 #include "queue.h"
 #include "util.h"
 
+// Taken directly from https://people.gnome.org/~ryanl/glib-docs/glib-Standard-Macros.html
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define BIT_SET(a, b) ((a) |= (1ULL << (b)))
@@ -29,7 +29,6 @@
 #define BIT_CHECK(a, b) (!!((a) & (1ULL << (b))))
 #define MAX_TIME_NEW_PROCS_SEC 1
 #define MAX_TIME_NEW_PROCS_NANO 15000
-#define CHANCE_PROCS_RT 5
 
 /* GLOBALS */
 typedef unsigned long int bv_t; /* Type-defined bit-vector */
@@ -344,7 +343,7 @@ void init_pcb(PCB* pcb, unsigned int loc_PID, pid_t pcb_PID)
 	printf("init_pcb\n");
 	pcb -> loc_pid = loc_PID;
 	pcb -> PCB_pid = pcb_PID;
-	pcb -> prio = rand() % 100 < CHANCE_PROCS_RT ? 0 : 1;
+	pcb -> prio = rand() % 100 < CHANCE_PROC_IO ? 0 : 1;
 
 	if (pcb -> prio == 0) global -> proc_count_realtime++;
 	else global -> proc_count_normal++;
