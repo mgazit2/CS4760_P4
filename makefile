@@ -1,27 +1,27 @@
 C		= gcc
 CFLAGS		= -Wall -g -lm
 
-OSS_SRC		= oss.c
-OSS_OBJ		= $(OSS_SRC:.c=.o) $(SHARED_OBJ) $(QUEUE_OBJ)
+SOSS		= oss.c
+OOSS		= $(SOSS:.c=.o) $(OUTIL) $(OQUEUE)
 OSS		= oss
 
-USER_SRC	= child.c
-USER_OBJ	= $(USER_SRC:.c=.o) $(SHARED_OBJ)
+SUSER	= child.c
+OUSER	= $(SUSER:.c=.o) $(OUTIL)
 USER		= child
 
-SHARED_OBJ	= util.o
+OUTIL	= util.o
 
-QUEUE_OBJ	= queue.o
+OQUEUE	= queue.o
 
 OUTPUT		= $(OSS) $(USER)
 
 all: $(OUTPUT)
 
-$(OSS): $(OSS_OBJ)
-	$(CC) $(CFLAGS) $(OSS_OBJ) -o $(OSS)
+$(OSS): $(OOSS)
+	$(CC) $(CFLAGS) $(OOSS) -o $(OSS)
 
-$(USER): $(USER_OBJ)
-	$(CC) $(CFLAGS) $(USER_OBJ) -o $(USER)
+$(USER): $(OUSER)
+	$(CC) $(CFLAGS) $(OUSER) -o $(USER)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $*.c -o $*.o

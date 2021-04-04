@@ -36,6 +36,10 @@ static int parent_msg_q_id;
 static key_t child_msg_q_key;
 static int child_msg_q_id;
 
+static key_t filename_key;
+static int filename_id;
+static char* filename;
+
 // Handles the initialization of various printer boundaries and executable name
 void init(int argc, char** argv)
 {
@@ -82,6 +86,10 @@ void alloc_shared_memory(bool n)
 	if ((shared_mem_key = ftok("makefile", 1)) == -1) crash("ftok");
 	if ((shared_mem_id = shmget(shared_mem_key, sizeof(Util), PERMITS | (n ? (IPC_EXCL | IPC_CREAT) : 0))) == -1) crash("shmget");
 	else shmptr = (Util *)shmat(shared_mem_id, NULL, 0);
+
+	if((filename_key = ftok("makefile", 4)) == -1) crash("ftok");
+	if((filename_id = shmget(filename_key, sizeof(char), PERMITS | (n ? (IPC_EXCL | IPC_CREAT) : 0))) == -1) crash("shmget");
+	else filename = (char *)shmat(filename_id, NULL, 0);
 }
 
 // handles the release of shared memory segments allocated by the program
@@ -89,6 +97,9 @@ void dealloc_shared_memory()
 {
 	if (shmptr != NULL && shmdt(shmptr) == -1) crash("shmdt");
 	if (shared_mem_id > 0 && shmctl(shared_mem_id, IPC_RMID, NULL) == -1) crash("shmctl");
+
+	if (filename != NULL && shmdt(filename) == -1) crash("shmdt");
+	if (filename_id > 0 && shmctl(filename_id, IPC_RMID, NULL) == -1) crash("shmctl");
 }
 
 // gets the shared memory segment of the program
@@ -144,7 +155,7 @@ int get_child_q()
 // handles the information loggings for a process at a given moment in the system
 void logger(char *fmt, ...)
 {
-	FILE* fp = fopen(DEF_LOG_PATH, "a+");
+	FILE* fp = fopen(filename, "a+");
 	if (fp == NULL) crash("fopen");
 
 	char buf0[BUFF_LEN];
@@ -154,7 +165,7 @@ void logger(char *fmt, ...)
 	va_end(args);
 
 	char buf1[BUFF_LEN];
-	snprintf(buf1, BUFF_LEN, "%s: [%010ld:%010ld] %s\n", basename(get_program_name()), shmptr->sys_time.seconds, shmptr->sys_time.nano, buf0); // see basename(3)
+	snprintf(buf1, BUFF_LEN, "./OSS: SYSTEM TIME (SECONDS:NANOSECONDS)  [%010ld:%010ld] %s\n", shmptr->sys_time.seconds, shmptr->sys_time.nano, buf0); // see basename(3)
 
 	fprintf(fp, buf1);
 	fprintf(stderr, buf1);
@@ -258,4 +269,14 @@ int get_q_quantum(int q)
 int get_usr_quantum(int q)
 {
 	return QUANTUM_BASE / pow(2, q);
+}
+
+char* get_filename()
+{
+	return filename;
+}
+
+void set_filename(char* _filename)
+{
+	strcpy(filename, _filename);
 }

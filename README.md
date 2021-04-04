@@ -39,3 +39,5 @@ Issues:
 
 	I was unable to make it such that the OSS stops spawning processes after 3 real time seconds, because of this, the proegram will only spawn 20 processes before proving that it can terminate
 	This was done to show that though this part of the program does not function as needed, the program itself can execute and terminate cleanly.
+
+	I apologize for the messy program output during execution, this is to show the OSS moving from step to step

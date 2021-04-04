@@ -135,6 +135,8 @@ int main(int argc, char** argv)
 	alloc_shared_memory(true);
 	alloc_msg_q(true);
 
+	set_filename(log_path);
+
 	global -> util = get_mem_seg();
 	global -> msg = (Msg *)malloc(sizeof(Msg));
 
@@ -284,9 +286,6 @@ void try_spawn()
 bool proc_can_spawn()
 {
 	printf("proc_can_spawn()\n");
-	Time *sys = &global -> util -> sys_time;
-	Time *next = &global -> next_spawn_try;
-	//return !quit && global -> spawned_proc_count < PROC_MAX && sys -> seconds >= next -> seconds && sys -> nano >= next -> nano;
 	return !quit && global -> spawned_proc_count < PROC_MAX;
 }
 
@@ -432,10 +431,11 @@ void on_proc_terminated(PCB* pcb)
 	printf("\tBlock:  %ld:%ld\n", pcb -> block.seconds, pcb -> block.nano);
 }
 
+// handler for processes ecpired
 void on_proc_exp(PCB* pcb)
 {
 	printf("on_proc_exp()\n");
-	int prev_prio = pcb -> prio;
+	//int prev_prio = pcb -> prio;
 	int next_prio = pcb -> prio;
 
 	int cent = 100;
@@ -470,6 +470,7 @@ void on_proc_exp(PCB* pcb)
 	global -> run = NULL;
 }
 
+// handler for processes blocked
 void on_proc_block(PCB* pcb)
 {
 	printf("on_proc_block()\n");
@@ -487,16 +488,18 @@ void on_proc_block(PCB* pcb)
 	global -> run = NULL;
 }
 
+// handler for process exiting
 void on_proc_exit(PCB* pcb)
 {
 	printf("on_proc_exit()\n");
 	global -> exited_proc_count++;
-	add_time(&global -> total_cpu, pcb -> cpu.seconds * 1e9 + pcb -> cpu.nano);
-	add_time(&global -> total_block, pcb -> block.seconds * 1e9 + pcb -> block.nano);
-	add_time(&global -> total_wait, pcb -> waiting.seconds * 1e9 + pcb -> waiting.nano);
+	add_time(&global -> total_cpu, pcb -> cpu.seconds + pcb -> cpu.nano);
+	add_time(&global -> total_block, pcb -> block.seconds + pcb -> block.nano);
+	add_time(&global -> total_wait, pcb -> waiting.seconds + pcb -> waiting.nano);
 	dealloc_pcb(pcb);
 }
 
+// free PCB memory for a given proc
 void dealloc_pcb(PCB* pcb)
 {
 	printf("dealloc_pcb()\n");
@@ -504,6 +507,7 @@ void dealloc_pcb(PCB* pcb)
 	memset(&global -> util -> proc_table[pcb -> loc_pid], 0, sizeof(PCB));
 }
 
+// check to see if a queue swap is necessary and needed
 void try_q_swap()
 {
 	printf("try_q_swap()\n");
@@ -524,6 +528,7 @@ void try_q_swap()
 	q_swap();
 }
 
+// swaps the active and expired queues
 void q_swap()
 {
 	printf("q_swap()\n");
@@ -532,6 +537,8 @@ void q_swap()
 	global -> expired = temp;
 }
 
+// handler for blocked processes
+// cycles through the blocked queue and unblocks possible processes
 void blocked_procs()
 {
 	printf("blocked_procs()\n");
@@ -561,6 +568,7 @@ void blocked_procs()
 	}
 }
 
+// unblock a given process
 void unblock_proc(PCB* pcb)
 {
 	printf("unblock_procs()\n");
@@ -568,6 +576,8 @@ void unblock_proc(PCB* pcb)
 	logger("%-6s PID: %2d, Priority: %d", "UUUUUU", pcb -> loc_pid, pcb -> prio);
 }
 
+// checks to see if it is possible to currently schedule a process
+// this is based on processes currently in active queue
 void try_schedule()
 {
 	printf("try_schedule\n");
@@ -586,6 +596,7 @@ void try_schedule()
 	}
 }
 
+// sends message to process notifying it of scheduling
 void schedule(PCB* pcb)
 {
 	printf("schedule()\n");
@@ -594,22 +605,26 @@ void schedule(PCB* pcb)
 	proc_scheduled(pcb);
 }
 
+// logs scheduling of a process
 void proc_scheduled(PCB *pcb)
 {
 	printf("proc_scheduled\n");
 	logger("%-6s PID: %2d, Priority: %d", "SSSSSS", pcb -> loc_pid, pcb -> prio);
 }
 
+// get function for active q
 Queue** get_active_q()
 {
 	return global -> active;
 }
 
+// get function for expired q
 Queue** get_exp_q()
 {
 	return global -> expired;
 }
 
+// get function for block q
 Queue* get_block_q()
 {
 	return global -> blocked;

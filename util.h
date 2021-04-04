@@ -15,7 +15,7 @@
 
 #define BUFF_LEN 1024
 #define PROC_CONC_MAX 18 // concurrent max processes allowed to run in the system at a time
-#define PROC_MAX 100 // maximum amount of processes allowed in the system at a time
+#define PROC_MAX 20 // maximum amount of processes allowed in the system at a time
 #define TIMEOUT 3
 #define DEF_LOG_PATH "./logfile"
 #define QUANTUM_BASE 1e7
@@ -90,5 +90,6 @@ void avg_time(Time*, int);
 
 int get_q_quantum(int);
 int get_usr_quantum(int);
-
+char* get_filename();
+void set_filename(char*);
 #endif
